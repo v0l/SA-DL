@@ -1,7 +1,48 @@
-from socket import *
+#!/usr/bin/env python
+#
+#	SA-DL v0.1
+#
 
-def getPacket(host,adr):
-	return "GET " + adr + " HTTP/1.1\r\nHost: " + host + "\r\nUser-Agent: Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.1.2) Gecko/20090729 Firefox/3.5.2 (.NET CLR 3.5.30729)\r\nAccept: */*\r\nAccept-Language: en\r\n\r\nAccept-Charset: utf-8\r\nKeep-Alive: 300\r\nConnection: keep-alive\r\n\r\n\r\n"
+from socket import *
+import threading,sys,time
+
+BLOCK_SIZE = 8192
+SPEED_UPDATE = 1
+
+class DownloadThread(threading.Thread):
+	def __init__(self, host, path, offset, adapter,fileHandle):
+		threading.Thread.__init__(self)
+		self.file = fileHandle
+		try:
+			self.s = socket(AF_INET, SOCK_STREAM)
+			self.s.bind((adapter,1337))
+			self.s.connect( (host, 80) )
+			self.q = buildRequest(host,path,offset)
+			self.s.send(self.q)
+		except Exception as er:
+			print er
+
+	def run(self):
+		pos = 0
+		startTime = time.time()
+		lastUpdate = 0
+		lpos = 0
+		while True:
+			try:
+				self.s.recv(BLOCK_SIZE)
+				pos+=1
+				elapsedTime = (time.time()-startTime)
+				if lastUpdate+SPEED_UPDATE<elapsedTime:
+					lastUpdate = elapsedTime
+					sys.stdout.write("\r" + humanize_bytes(lpos*BLOCK_SIZE/elapsedTime) + "/s   ")
+					sys.stdout.flush()
+					lpos = pos-lpos
+			except Exception as er:
+				print er
+		self.s.close()
+        
+def buildRequest(host,adr,offset):
+	return "GET " + adr + " HTTP/1.1\r\nHost: " + host + "\r\nRange: bytes=" + str(offset) + "-\r\n\r\n\r\n"
 
 def parseContentLength(resp):
 	if resp.find("Content-Length:")>0:
@@ -9,11 +50,18 @@ def parseContentLength(resp):
 	else:
 		return -1
 
-s = socket( AF_INET, SOCK_STREAM )
-s.connect( ( "minesrc.com", 80 ) )
-req = getPacket("minesrc.com","/world.zip")
-bytesSent = s.send( req )
-data = s.recv(256)
-size = parseContentLength(data)
-print str(round(float(size)/1024/1024,2)) + " Mb"
-s.close()
+def humanize_bytes(bytes, precision=2):
+    abbrevs = ((1<<50L, 'PB'),(1<<40L, 'TB'),(1<<30L, 'GB'),(1<<20L, 'MB'),(1<<10L, 'kB'),(1, 'bytes'))
+    if bytes == 1:
+        return '1 byte'
+    for factor, suffix in abbrevs:
+        if bytes >= factor:
+            break
+    return '%.*f %s' % (precision, bytes / factor, suffix)
+
+#f = open("test1.data",'w+')
+#f.truncate(1024)
+
+t = DownloadThread("minesrc.com","/world.zip",0,"192.168.1.100",220)
+t.start()
+
