@@ -1,18 +1,23 @@
 #!/usr/bin/env python
 #
-#	SA-DL v0.1
+#	SA-DL v0.3 POC
 #
 
 from socket import *
-import threading,sys,time
+import threading,sys,time,array
 
-BLOCK_SIZE = 8192
+BLOCK_SIZE = 1024
 SPEED_UPDATE = 1
-
+DATA_RECV = 0
+DATA_LEN = 0
+def buildRequest(host,adr,offset):
+	return "GET " + adr + " HTTP/1.1\r\nHost: " + host + "\r\nRange: bytes=" + str(offset) + "-\r\n\r\n\r\n"
+		
 class DownloadThread(threading.Thread):
 	def __init__(self, host, path, offset, adapter,fileHandle):
 		threading.Thread.__init__(self)
-		self.file = fileHandle
+		self.file = open(fileHandle,'w')
+		self.file.seek(offset)
 		try:
 			self.s = socket(AF_INET, SOCK_STREAM)
 			self.s.bind((adapter,1337))
@@ -23,45 +28,68 @@ class DownloadThread(threading.Thread):
 			print er
 
 	def run(self):
-		pos = 0
-		startTime = time.time()
-		lastUpdate = 0
-		lpos = 0
+		global DATA_RECV,DATA_LEN
+		headerClear = False
 		while True:
 			try:
-				self.s.recv(BLOCK_SIZE)
-				pos+=1
-				elapsedTime = (time.time()-startTime)
-				if lastUpdate+SPEED_UPDATE<elapsedTime:
-					lastUpdate = elapsedTime
-					sys.stdout.write("\r" + humanize_bytes(lpos*BLOCK_SIZE/elapsedTime) + "/s   ")
-					sys.stdout.flush()
-					lpos = pos-lpos
+				data = self.s.recv(BLOCK_SIZE)
+				self.file.write(data)
+				DATA_RECV += len(data)
 			except Exception as er:
 				print er
+				return;
 		self.s.close()
-        
-def buildRequest(host,adr,offset):
-	return "GET " + adr + " HTTP/1.1\r\nHost: " + host + "\r\nRange: bytes=" + str(offset) + "-\r\n\r\n\r\n"
+		print "Done"
+class MainThread(threading.Thread):
+	def __init__(self,host,path):
+		threading.Thread.__init__(self)
+		
+		##Globals
+		global DATA_LEN
+		
+		##Get content length
+		s = socket(AF_INET, SOCK_STREAM)
+		s.connect( (host, 80) )
+		q = buildRequest(host,path,0)
+		s.send(q)
+		d = s.recv(512)
+		DATA_LEN = int(self.parseContentLength(d))
+		print "File size: " + self.humanize_bytes(DATA_LEN)
+		s.close()
+		
+		##initialize the file
+		File = path[path.rfind('/')+1:len(path)]
+		f = open(File,'w+')
+		f.truncate(DATA_LEN)
+		f.close()
+		
+		t = DownloadThread(host,path,0,"192.168.1.100",File)
+		t.start()
+		t2 = DownloadThread(host,path,DATA_LEN/2,"192.168.1.15",File)
+		t2.start()
+		
+	def run(self):
+		downloading = True
 
-def parseContentLength(resp):
-	if resp.find("Content-Length:")>0:
-		return resp[resp.find("Content-Length:")+16:resp.find("\r\n",resp.find("Content-Length:")-1)]
-	else:
-		return -1
+		while downloading:
+			sys.stdout.write("\r" + str(self.humanize_bytes(DATA_RECV)) + "   ")
+			sys.stdout.flush()
+			time.sleep(1)
+			
+	def parseContentLength(self,resp):
+		if resp.find("Content-Length:")>0:
+			return resp[resp.find("Content-Length:")+16:resp.find("\r\n",resp.find("Content-Length:")-1)]
+		else:
+			return -1
 
-def humanize_bytes(bytes, precision=2):
-    abbrevs = ((1<<50L, 'PB'),(1<<40L, 'TB'),(1<<30L, 'GB'),(1<<20L, 'MB'),(1<<10L, 'kB'),(1, 'bytes'))
-    if bytes == 1:
-        return '1 byte'
-    for factor, suffix in abbrevs:
-        if bytes >= factor:
-            break
-    return '%.*f %s' % (precision, bytes / factor, suffix)
+	def humanize_bytes(self,bytes, precision=2):
+		bytes = float(bytes)
+		a = ['B','kB','MB','GB','PB']
+		p = 0
+		while bytes>=1024:
+			bytes /= 1024
+			p += 1
+		return str(str(round(bytes,precision)) + " " + a[p])
 
-#f = open("test1.data",'w+')
-#f.truncate(1024)
-
-t = DownloadThread("minesrc.com","/world.zip",0,"192.168.1.100",220)
-t.start()
-
+main = MainThread("minesrc.com","/world.zip")
+main.start()
