@@ -6,23 +6,28 @@
 from socket import *
 import threading,sys,time,array
 
-BLOCK_SIZE = 1024
+BLOCK_SIZE = 128
 SPEED_UPDATE = 1
 DATA_RECV = 0
 DATA_LEN = 0
-def buildRequest(host,adr,offset):
-	return "GET " + adr + " HTTP/1.1\r\nHost: " + host + "\r\nRange: bytes=" + str(offset) + "-\r\n\r\n\r\n"
+
+def buildRequest(host,adr,offset,end):
+	return "GET " + adr + " HTTP/1.1\r\nHost: " + host + "\r\nRange: bytes=" + str(offset) + "-" + str(end) + "\r\n\r\n\r\n"
 		
 class DownloadThread(threading.Thread):
 	def __init__(self, host, path, offset, adapter,fileHandle):
 		threading.Thread.__init__(self)
 		self.file = open(fileHandle,'w')
 		self.file.seek(offset)
+		if offset != 0:
+			end = DATA_LEN/2
+		else:
+			end = DATA_LEN
 		try:
 			self.s = socket(AF_INET, SOCK_STREAM)
 			self.s.bind((adapter,1337))
 			self.s.connect( (host, 80) )
-			self.q = buildRequest(host,path,offset)
+			self.q = buildRequest(host,path,offset,end)
 			self.s.send(self.q)
 		except Exception as er:
 			print er
@@ -50,9 +55,10 @@ class MainThread(threading.Thread):
 		##Get content length
 		s = socket(AF_INET, SOCK_STREAM)
 		s.connect( (host, 80) )
-		q = buildRequest(host,path,0)
+		q = buildRequest(host,path,0,'')
 		s.send(q)
 		d = s.recv(512)
+		print d
 		DATA_LEN = int(self.parseContentLength(d))
 		print "File size: " + self.humanize_bytes(DATA_LEN)
 		s.close()
@@ -91,5 +97,5 @@ class MainThread(threading.Thread):
 			p += 1
 		return str(str(round(bytes,precision)) + " " + a[p])
 
-main = MainThread("minesrc.com","/world.zip")
+main = MainThread("minesrc.com","/imgs/screenshots/2012-02-03_18.08.48.png")
 main.start()
