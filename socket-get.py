@@ -6,7 +6,7 @@
 from socket import *
 import threading,sys,time,array,httplib
 
-BLOCK_SIZE = 1024
+BLOCK_SIZE = 512
 SPEED_UPDATE = 1
 DATA_RECV = 0
 DATA_LEN = 0
@@ -19,13 +19,13 @@ class DownloadThread(threading.Thread):
 	def __init__(self, host, path, offset, adapter,fileHandle,name):
 		threading.Thread.__init__(self)
 		self.name = name
-		self.file = open(fileHandle,'w')
+		self.file = open(fileHandle,'wb')
 		self.file.seek(offset)
 		
 		if offset>0:
 			end = DATA_LEN
 		else:
-			end = DATA_LEN/2
+			end = (DATA_LEN/2)-1
 			
 		try:
 			self.s = socket(AF_INET, SOCK_STREAM)
@@ -53,7 +53,7 @@ class DownloadThread(threading.Thread):
 					self.data_len += len(data)
 				else:
 					THREADS_DONE += 1
-					print "\n" + self.name + ":~" + str(round(DATA_RECV/(time.time()-start)/1024,2)) + "kB/s"
+					#print "\n" + self.name + ":~" + str(round(DATA_RECV/(time.time()-start)/1024,2)) + "kB/s"
 					return
 				DATA_RECV += len(data)
 			except Exception as er:
@@ -81,28 +81,31 @@ class MainThread(threading.Thread):
 		
 		##initialize the file
 		File = path[path.rfind('/')+1:len(path)]
-		f = open(File,'w+')
+		f = open(File,'wb+')
 		f.truncate(DATA_LEN)
 		f.close()
 		
-		self.t = DownloadThread(host,path,1,"192.168.1.100",File,"Thread-1")
+		self.t = DownloadThread(host,path,0,"192.168.1.100",File,"Thread-1")
 		self.t.start()
-		self.t2 = DownloadThread(host,path,DATA_LEN/2,"192.168.1.16",File,"Thread-2")
+		self.t2 = DownloadThread(host,path,DATA_LEN/2,"192.168.1.10",File,"Thread-2")
 		self.t2.start()
 		
 	def run(self):
 		global THREADS_DONE,DATA_RECV
 		downloading = True
 		start = time.time()
+		lSize = 0
 		
 		while downloading:
-			sys.stdout.write("\r" + str(self.humanize_bytes(DATA_RECV)) + "   ")
+			sys.stdout.write("\r" + str(self.humanize_bytes(DATA_RECV)) + " - " + self.humanize_bytes(DATA_RECV-lSize) + "/s     ")
 			sys.stdout.flush()
+			lSize = DATA_RECV
 			if THREADS_DONE==2:
-				print "\n~" + str(self.humanize_bytes(DATA_RECV/(time.time()-start))) + "/s"
+				print "\n~" + str(self.humanize_bytes(DATA_RECV/(time.time()-start))) + "/s   "
 				print "Time taken: " + str(time.time()-start)
 				break
 			time.sleep(1)
+		raw_input("Press enter to exit...")
 			
 	def parseContentLength(self,resp):
 		if resp.find("Content-Length:")>0:
