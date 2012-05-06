@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 #
-#	SA-DL v0.3 POC
+#	SA-DL v1.0
 #
 
 from socket import *
-import threading,sys,time,array,httplib
+import threading,sys,time,array,httplib,datetime
 
 BLOCK_SIZE = 512
 SPEED_UPDATE = 1
@@ -54,6 +54,7 @@ class DownloadThread(threading.Thread):
 				else:
 					THREADS_DONE += 1
 					#print "\n" + self.name + ":~" + str(round(DATA_RECV/(time.time()-start)/1024,2)) + "kB/s"
+					self.s.close()
 					return
 				DATA_RECV += len(data)
 			except Exception as er:
@@ -81,6 +82,8 @@ class MainThread(threading.Thread):
 		
 		##initialize the file
 		File = path[path.rfind('/')+1:len(path)]
+		File = File.replace("%20"," ")
+		print File + "\n"
 		f = open(File,'wb+')
 		f.truncate(DATA_LEN)
 		f.close()
@@ -97,12 +100,17 @@ class MainThread(threading.Thread):
 		lSize = 0
 		
 		while downloading:
-			sys.stdout.write("\r" + str(self.humanize_bytes(DATA_RECV)) + " - " + self.humanize_bytes(DATA_RECV-lSize) + "/s     ")
+			try:
+				tos = ((DATA_LEN-DATA_RECV)/(DATA_RECV-lSize))
+			except:
+				tos = 0
+
+			sys.stdout.write("\r" + str(self.humanize_bytes(DATA_RECV)) + " - " + self.humanize_bytes(DATA_RECV-lSize) + "/s [ " + str(datetime.timedelta(seconds=tos)) + " ]    ")
 			sys.stdout.flush()
 			lSize = DATA_RECV
 			if THREADS_DONE==2:
 				print "\n~" + str(self.humanize_bytes(DATA_RECV/(time.time()-start))) + "/s   "
-				print "Time taken: " + str(time.time()-start)
+				print "Time taken: " + str(datetime.timedelta(seconds=time.time()-start))
 				break
 			time.sleep(1)
 		raw_input("Press enter to exit...")
@@ -122,5 +130,5 @@ class MainThread(threading.Thread):
 			p += 1
 		return str(str(round(bytes,precision)) + " " + a[p])
 
-main = MainThread("kharkin.ie","/SubExtract.zip")
+main = MainThread("sub.minesrc.com","/Downloads/.incomplete/[m.3.3.w]%20Chaos%20Head%2001-12%20(H.264)/[m.3.3.w]%20Chaos%20Head%20-%2001v2%20(H.264)%20[094A3E22].mkv")
 main.start()
