@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 #
-#	SA-DL v1.0
+#	SA-DL v1.1 POC
 #
+#	Copyright Kieran Harkin 2012
 
 from socket import *
 import threading,sys,time,array,httplib,datetime
@@ -11,10 +12,25 @@ SPEED_UPDATE = 1
 DATA_RECV = 0
 DATA_LEN = 0
 THREADS_DONE = 0
+LINKS = []
 
 def buildRequest(host,adr,offset,end):
 	return "GET " + adr + " HTTP/1.1\r\nHost: " + host + "\r\nRange: bytes=" + str(offset) + "-" + str(end) + "\r\n\r\n\r\n"
-		
+
+def printAbout():
+	print "Copyright Kieran Harkin 2012 (c)\n\nUsage:\n\tSA-DL.py <options> <file1,file2...>\n\n\nOptions:\n\t-i\tEnter interfaces to use (comma spereated)\n\t\t-i 192.168.0.1,192.168.0.2\n\n\t-f\tEnter text file with links\n\t\t-f links.txt\n\n\t-d\tOutput directory\n\t\t-d downloads/\n"
+
+def loadTextFile(file):
+	global LINKS
+	try:
+		file = open(file,"r")
+		for i in file:
+			LINKS.append(i.strip())	
+		print str(len(LINKS)) + " links loaded!\n"
+		return True
+	except Exception as ex: 
+		print ex
+		return False
 class DownloadThread(threading.Thread):
 	def __init__(self, host, path, offset, adapter,fileHandle,name):
 		threading.Thread.__init__(self)
@@ -66,14 +82,19 @@ class DownloadThread(threading.Thread):
 class MainThread(threading.Thread):
 	def __init__(self,host,path):
 		threading.Thread.__init__(self)
+		self.host = host
+		self.path = path
 		
-		##Globals
-		global DATA_LEN
+	def run(self):
+		global THREADS_DONE,DATA_RECV,DATA_LEN
+		DATA_RECV = 0
+		DATA_LEN = 0
+		THREADS_DONE = 0
 		
 		##Get content length
 		s = socket(AF_INET, SOCK_STREAM)
-		s.connect( (host, 80) )
-		q = buildRequest(host,path,0,'')
+		s.connect( (self.host, 80) )
+		q = buildRequest(self.host,self.path,0,'')
 		s.send(q)
 		d = s.recv(512)
 		DATA_LEN = int(self.parseContentLength(d))
@@ -81,20 +102,17 @@ class MainThread(threading.Thread):
 		s.close()
 		
 		##initialize the file
-		File = path[path.rfind('/')+1:len(path)]
+		File = self.path[self.path.rfind('/')+1:len(self.path)]
 		File = File.replace("%20"," ")
 		print File + "\n"
 		f = open(File,'wb+')
 		f.truncate(DATA_LEN)
 		f.close()
 		
-		self.t = DownloadThread(host,path,0,"192.168.1.100",File,"Thread-1")
+		self.t = DownloadThread(self.host,self.path,0,"192.168.1.100",File,"Thread-1")
 		self.t.start()
-		self.t2 = DownloadThread(host,path,DATA_LEN/2,"192.168.1.10",File,"Thread-2")
+		self.t2 = DownloadThread(self.host,self.path,DATA_LEN/2,"192.168.1.10",File,"Thread-2")
 		self.t2.start()
-		
-	def run(self):
-		global THREADS_DONE,DATA_RECV
 		downloading = True
 		start = time.time()
 		lSize = 0
@@ -109,11 +127,11 @@ class MainThread(threading.Thread):
 			sys.stdout.flush()
 			lSize = DATA_RECV
 			if THREADS_DONE==2:
-				print "\n~" + str(self.humanize_bytes(DATA_RECV/(time.time()-start))) + "/s   "
-				print "Time taken: " + str(datetime.timedelta(seconds=time.time()-start))
+				#print "\n~" + str(self.humanize_bytes(DATA_RECV/(time.time()-start))) + "/s   "
+				#print "Time taken: " + str(datetime.timedelta(seconds=time.time()-start))
+				print "-----------------\n"
 				break
 			time.sleep(1)
-		raw_input("Press enter to exit...")
 			
 	def parseContentLength(self,resp):
 		if resp.find("Content-Length:")>0:
@@ -130,5 +148,28 @@ class MainThread(threading.Thread):
 			p += 1
 		return str(str(round(bytes,precision)) + " " + a[p])
 
-main = MainThread("sub.minesrc.com","/Downloads/.incomplete/[m.3.3.w]%20Chaos%20Head%2001-12%20(H.264)/[m.3.3.w]%20Chaos%20Head%20-%2001v2%20(H.264)%20[094A3E22].mkv")
-main.start()
+##Menu systems
+if len(sys.argv)>1:
+	
+	for arg in range(len(sys.argv)):
+		if sys.argv[arg]=="-f":
+			#Load text file of links
+			try:
+				if not loadTextFile(sys.argv[arg+1]):
+					raise
+			except:
+				print "Invalid syntax : " + str(sys.argv)
+				exit()
+		elif sys.argv[arg]=="-i":
+			#load the interfaces
+			loadInterfaceList(sys.argv[arg+1])
+			
+	for link in LINKS:
+		if link.find("http://")>=0:
+			link = link.replace("http://","")
+		main = MainThread(link[0:link.find("/")],link[link.find("/"):len(link)])
+		main.start()
+		main.join()
+else:
+	print "Invalid syntax : " + str(sys.argv)
+	printAbout()

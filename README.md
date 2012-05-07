@@ -2,11 +2,10 @@ Concept:
   To download a single file on 2 or more adapters, connected to multiple internet sources.
   
 Stage:
-  Proof of concept - can it actaully be done? 
+  Alpha 1.1
 
 Current results:
-  Using muiltiple adapters doesnt seem to have any effect whatsoever, while they both download half of a file each
-  and both threads are requred to download the file correctly...
+  All tests on a Windows 7 machines work fully, file is downloaded fully and correctly (may add md5 check also)
   
 Next stage:
-  Investigate different file writing methods and(or) rewrite file writing to use que based writing
+  Develop cli and confirm usage on Linux and Mac
