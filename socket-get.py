@@ -7,12 +7,15 @@
 from socket import *
 import threading,sys,time,array,httplib,datetime
 
-BLOCK_SIZE = 512
+BLOCK_SIZE = 1024
 SPEED_UPDATE = 1
 DATA_RECV = 0
 DATA_LEN = 0
 THREADS_DONE = 0
 LINKS = []
+CHUNK_SIZE = 0
+DEVS = []
+DEBUG = False
 
 def buildRequest(host,adr,offset,end):
 	return "GET " + adr + " HTTP/1.1\r\nHost: " + host + "\r\nRange: bytes=" + str(offset) + "-" + str(end) + "\r\n\r\n\r\n"
@@ -31,18 +34,28 @@ def loadTextFile(file):
 	except Exception as ex: 
 		print ex
 		return False
+
+def loadInterfaceList(cmd):
+	if cmd.find(','):
+		for dev in cmd.split(','):
+			DEVS.append(dev)
+			print "Device added: " + dev
+	else:
+		DEVS.append(dev)
+	
+	##Set chunk size
+	CHUNK_SIZE = DATA_LEN/len(DEVS)
+	
 class DownloadThread(threading.Thread):
-	def __init__(self, host, path, offset, adapter,fileHandle,name):
+	def __init__(self, host, path, id, adapter,fileHandle):
 		threading.Thread.__init__(self)
-		self.name = name
 		self.file = open(fileHandle,'wb')
+		
+		offset = CHUNK_SIZE*id
+		end = offset+CHUNK_SIZE
+		
 		self.file.seek(offset)
 		
-		if offset>0:
-			end = DATA_LEN
-		else:
-			end = (DATA_LEN/2)-1
-			
 		try:
 			self.s = socket(AF_INET, SOCK_STREAM)
 			self.s.bind((adapter,0))
@@ -69,7 +82,6 @@ class DownloadThread(threading.Thread):
 					self.data_len += len(data)
 				else:
 					THREADS_DONE += 1
-					#print "\n" + self.name + ":~" + str(round(DATA_RECV/(time.time()-start)/1024,2)) + "kB/s"
 					self.s.close()
 					return
 				DATA_RECV += len(data)
@@ -81,12 +93,13 @@ class DownloadThread(threading.Thread):
 		
 class MainThread(threading.Thread):
 	def __init__(self,host,path):
+		global DEBUG
 		threading.Thread.__init__(self)
 		self.host = host
 		self.path = path
 		
 	def run(self):
-		global THREADS_DONE,DATA_RECV,DATA_LEN
+		global THREADS_DONE,DATA_RECV,DATA_LEN,DEVS
 		DATA_RECV = 0
 		DATA_LEN = 0
 		THREADS_DONE = 0
@@ -109,10 +122,10 @@ class MainThread(threading.Thread):
 		f.truncate(DATA_LEN)
 		f.close()
 		
-		self.t = DownloadThread(self.host,self.path,0,"192.168.1.100",File,"Thread-1")
-		self.t.start()
-		self.t2 = DownloadThread(self.host,self.path,DATA_LEN/2,"192.168.1.10",File,"Thread-2")
-		self.t2.start()
+		for dev in range(len(DEVS)):
+			t = DownloadThread(self.host,self.path,dev,DEVS[dev],File)
+			t.start()
+
 		downloading = True
 		start = time.time()
 		lSize = 0
@@ -126,7 +139,7 @@ class MainThread(threading.Thread):
 			sys.stdout.write("\r" + str(self.humanize_bytes(DATA_RECV)) + " - " + self.humanize_bytes(DATA_RECV-lSize) + "/s [ " + str(datetime.timedelta(seconds=tos)) + " ]    ")
 			sys.stdout.flush()
 			lSize = DATA_RECV
-			if THREADS_DONE==2:
+			if THREADS_DONE==len(DEVS):
 				#print "\n~" + str(self.humanize_bytes(DATA_RECV/(time.time()-start))) + "/s   "
 				#print "Time taken: " + str(datetime.timedelta(seconds=time.time()-start))
 				print "-----------------\n"
@@ -163,13 +176,19 @@ if len(sys.argv)>1:
 		elif sys.argv[arg]=="-i":
 			#load the interfaces
 			loadInterfaceList(sys.argv[arg+1])
+		elif sys.argv[arg]=="--debug":
+			DEGUB = True
 			
 	for link in LINKS:
 		if link.find("http://")>=0:
 			link = link.replace("http://","")
-		main = MainThread(link[0:link.find("/")],link[link.find("/"):len(link)])
-		main.start()
-		main.join()
+		try:
+			main = MainThread(link[0:link.find("/")],link[link.find("/"):len(link)])
+			main.start()
+			main.join()
+		except e:
+			print "Error: " + link
+
 else:
 	print "Invalid syntax : " + str(sys.argv)
 	printAbout()
