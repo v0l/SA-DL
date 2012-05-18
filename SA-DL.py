@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-#	SA-DL v1.1 POC
+#	SA-DL v0.1 Beta
 #
 #	Copyright Kieran Harkin 2012
 
@@ -142,7 +142,7 @@ class MainThread(threading.Thread):
 			if THREADS_DONE==len(DEVS):
 				#print "\n~" + str(self.humanize_bytes(DATA_RECV/(time.time()-start))) + "/s   "
 				#print "Time taken: " + str(datetime.timedelta(seconds=time.time()-start))
-				print "-----------------\n"
+				print "\n------------------------------\n"
 				break
 			time.sleep(1)
 			
