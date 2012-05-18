@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-#	SA-DL v0.1 Beta
+#	SA-DL v0.1.2 Beta
 #
 #	Copyright Kieran Harkin 2012
 
@@ -49,7 +49,7 @@ def loadInterfaceList(cmd):
 class DownloadThread(threading.Thread):
 	def __init__(self, host, path, id, adapter,fileHandle):
 		threading.Thread.__init__(self)
-		self.file = open(fileHandle,'wb')
+		self.file = open(fileHandle,"wb")
 		
 		offset = CHUNK_SIZE*id
 		end = offset+CHUNK_SIZE
@@ -62,12 +62,11 @@ class DownloadThread(threading.Thread):
 			self.s.connect( (host, 80) )
 			self.q = buildRequest(host,path,offset,end)
 			self.s.send(self.q)
-		except Exception as er:
-			print er
+		except:
+			print "Connection Error!"
 
 	def run(self):
 		global DATA_RECV,DATA_LEN,THREADS_DONE
-		headerClear = False
 		
 		self.data_len = 0
 		start = time.time()
@@ -85,8 +84,8 @@ class DownloadThread(threading.Thread):
 					self.s.close()
 					return
 				DATA_RECV += len(data)
-			except Exception as er:
-				print er
+			except:
+				print "Socket error..No response"
 				return;
 		self.s.close()
 		print "Done"
@@ -105,20 +104,32 @@ class MainThread(threading.Thread):
 		THREADS_DONE = 0
 		
 		##Get content length
-		s = socket(AF_INET, SOCK_STREAM)
-		s.connect( (self.host, 80) )
-		q = buildRequest(self.host,self.path,0,'')
-		s.send(q)
-		d = s.recv(512)
-		DATA_LEN = int(self.parseContentLength(d))
+		try:
+			s = socket(AF_INET, SOCK_STREAM)
+			s.settimeout(2.0)
+			s.bind((DEVS[0],0))
+			s.connect( (self.host, 3128) )
+			q = buildRequest(self.host,self.path,0,'')
+			print q
+			s.send(q)
+			d = s.recv(512)
+			DATA_LEN = int(self.parseContentLength(d))
+		except:
+			print "Cant connect to host: " + self.host
+			return;
+			
 		print "File size: " + self.humanize_bytes(DATA_LEN)
 		s.close()
 		
 		##initialize the file
-		File = self.path[self.path.rfind('/')+1:len(self.path)]
+		split = self.path.rfind('/')
+		if self.path.rfind('=')>split:
+			split = self.path.rfind('=')
+			
+		File = self.path[split+1:len(self.path)]
 		File = File.replace("%20"," ")
 		print File + "\n"
-		f = open(File,'wb+')
+		f = open(File,"w")
 		f.truncate(DATA_LEN)
 		f.close()
 		
@@ -183,11 +194,12 @@ if len(sys.argv)>1:
 		if link.find("http://")>=0:
 			link = link.replace("http://","")
 		try:
-			main = MainThread(link[0:link.find("/")],link[link.find("/"):len(link)])
+			main = MainThread(link[0:link.find("/")],link)
 			main.start()
 			main.join()
-		except e:
+		except:
 			print "Error: " + link
+			break;
 
 else:
 	print "Invalid syntax : " + str(sys.argv)
